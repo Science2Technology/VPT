@@ -1,0 +1,25 @@
+# --- Build & publish output (covers VPT.exe) ---
+**/bin/
+**/obj/
+**/bin/**/publish/
+dist/
+
+# --- Logs ---
+logs/
+*.log
+
+# --- IDE/user files ---
+.vs/
+*.user
+*.suo
+
+# --- Symbols/temp ---
+*.pdb
+*.tmp
+*.bak
+*.old
+
+# --- FFmpeg binaries (keep local, don’t track) ---
+ThirdParty/bin/ffmpeg.exe
+ThirdParty/bin/ffplay.exe
+ThirdParty/bin/ffprobe.exe
