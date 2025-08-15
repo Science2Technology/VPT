@@ -3,26 +3,20 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
 
-    <!-- One-file portable exe with built-in runtime -->
-    <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>true</SelfContained>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
-    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
-    <PublishTrimmed>false</PublishTrimmed>
+    <!-- ✅ Add this: path relative to project root -->
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
 
-  <!-- Embed PNG icons into the EXE -->
   <ItemGroup>
-    <EmbeddedResource Include="Assets\IconsPng\*.png" />
-  </ItemGroup>
+    <!-- Keep embedding your PNG button icons as resources if you do so -->
+    <!-- Example: <EmbeddedResource Include="Assets\IconsPng\*.png" /> -->
 
-  <!-- Bundle the entire FFmpeg build folder (kept on disk next to EXE) -->
-  <ItemGroup>
-    <Content Include="ThirdParty\**\*.*">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
+    <None Include="VPT\Assets\IconsPng\**\*.png" CopyToOutputDirectory="PreserveNewest" />
+  <None Include="Assets\IconsPng\**\*.png"    CopyToOutputDirectory="PreserveNewest" />
+    <None Include="VPT\Assets\IconsPng\**\*.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

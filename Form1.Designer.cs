@@ -1,4 +1,4 @@
-﻿namespace VPT;
+﻿﻿namespace VPT;
 
 partial class Form1
 {
