@@ -11,12 +11,12 @@
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
 
+  
   <ItemGroup>
-    <!-- Keep embedding your PNG button icons as resources if you do so -->
-    <!-- Example: <EmbeddedResource Include="Assets\IconsPng\*.png" /> -->
-
-    <None Include="VPT\Assets\IconsPng\**\*.png" CopyToOutputDirectory="PreserveNewest" />
-  <None Include="Assets\IconsPng\**\*.png"    CopyToOutputDirectory="PreserveNewest" />
-    <None Include="VPT\Assets\IconsPng\**\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Assets\*.png" />
+    <EmbeddedResource Include="Assets\*.ico" />
+    <EmbeddedResource Include="ThirdParty\bin\ffmpeg.exe" />
+    <EmbeddedResource Include="ThirdParty\bin\ffplay.exe" />
+    <EmbeddedResource Include="ThirdParty\bin\ffprobe.exe" />
   </ItemGroup>
 </Project>

@@ -55,12 +55,12 @@ namespace VPT
 
         // --- State -----------------------------------------------------------
         private float _customRotateDeg = 0f;
+        private string? _pendingInputFile;
 
         // --- PATHS FOR PNG ICONS (covers both layouts) ----------------------
         internal static readonly string[] IconSearchDirs = new[]
         {
-            Path.Combine(AppContext.BaseDirectory, "VPT",    "Assets", "IconsPng"),
-            Path.Combine(AppContext.BaseDirectory,           "Assets", "IconsPng"),
+            Path.Combine(AppContext.BaseDirectory, "Assets"),
         };
 
         public Form1()
@@ -159,10 +159,13 @@ namespace VPT
             leftDropArea.Controls.Add(dropLabel);
             leftDropArea.AllowDrop = true;
             leftDropArea.DragEnter += (s, e) => { if (e.Data?.GetDataPresent(DataFormats.FileDrop) == true) e.Effect = DragDropEffects.Copy; };
-            leftDropArea.DragDrop += async (s, e) =>
+            leftDropArea.DragDrop += (s, e) =>
             {
                 if (e.Data?.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
-                    await Rotate90Async(files[0]); // test action
+                {
+                    _pendingInputFile = files[0];
+                    MessageBox.Show("File loaded. Now select actions and click Render.", "VPT");
+                }
             };
             content.Controls.Add(leftDropArea, 0, 0);
 
@@ -210,7 +213,26 @@ namespace VPT
             renderBtn.FlatAppearance.BorderSize = 1;
             renderBtn.FlatAppearance.BorderColor = CardBgHover;
             renderBtn.FlatAppearance.MouseOverBackColor = CardBgHover;
-            renderBtn.Click += (s, e) => MessageBox.Show("Render queued (placeholder).", "VPT");
+            renderBtn.Click += async (s, e) =>
+            {
+                string? inputFile = _pendingInputFile;
+                if (inputFile == null)
+                {
+                    var ofd = new OpenFileDialog
+                    {
+                        Title = "Select video file",
+                        Filter = "Video Files|*.mp4;*.mov;*.avi;*.mkv;*.webm;*.wmv|All Files|*.*"
+                    };
+                    if (ofd.ShowDialog(this) == DialogResult.OK)
+                        inputFile = ofd.FileName;
+                }
+                if (inputFile != null)
+                {
+                    await ProcessAllActionsAsync(inputFile);
+                    MessageBox.Show("Render complete. See logs folder for details.", "VPT");
+                    _pendingInputFile = null; // reset after processing
+                }
+            };
             renderBtn.Resize += (s, e) => ApplyRounded(renderBtn, 12);
             root.Controls.Add(renderBtn, 0, 1);
             ApplyRounded(renderBtn, 12);
@@ -497,76 +519,196 @@ namespace VPT
             tabTranscode.Controls.Add(wip2);
         }
 
-        // ===================== Minimal FFmpeg runner (test: rotate 90) =====================
-        private string NewLogFilePath()
-        {
-            string exeDir = Path.GetDirectoryName(Environment.ProcessPath)!;
-            string logsDir = Path.Combine(exeDir, "logs");
-            Directory.CreateDirectory(logsDir);
-            string stamp = DateTime.Now.ToString("yyyy-MM-dd_HH.mm.ss");
-            return Path.Combine(logsDir, $"{stamp}_log.txt");
-        }
+        
 
-        private async Task Rotate90Async(string inputPath)
+        private async Task ProcessAllActionsAsync(string inputPath)
         {
             string logFile = NewLogFilePath();
-            File.AppendAllText(logFile, $"Log file: {logFile}{Environment.NewLine}");
-
-            if (!File.Exists(inputPath))
+            try
             {
-                File.AppendAllText(logFile, $"File not found: {inputPath}{Environment.NewLine}");
-                return;
-            }
+                File.AppendAllText(logFile, $"Log file: {logFile}{Environment.NewLine}");
 
-            string baseDir = AppContext.BaseDirectory;
-            string ffmpegPath = Path.Combine(baseDir, "ThirdParty", "bin", "ffmpeg.exe");
-            if (!File.Exists(ffmpegPath)) ffmpegPath = Path.Combine(baseDir, "ffmpeg.exe");
-            if (!File.Exists(ffmpegPath))
-            {
-                File.AppendAllText(logFile, @"ERROR: ffmpeg.exe not found. Expected at: .\ThirdParty\bin\ffmpeg.exe" + Environment.NewLine);
-                return;
-            }
-
-            string dir = Path.GetDirectoryName(inputPath)!;
-            string name = Path.GetFileNameWithoutExtension(inputPath);
-            string ext = Path.GetExtension(inputPath);
-            string outPath = Path.Combine(dir, $"{name}_rot90{ext}");
-
-            string args =
-                $"-y -i \"{inputPath}\" " +
-                "-map 0:v:0 -map 0:a? " +
-                "-vf \"transpose=clock\" " +
-                "-c:v libx264 -preset veryfast -crf 20 " +
-                "-c:a copy -movflags +faststart " +
-                $"\"{outPath}\"";
-
-            File.AppendAllText(logFile, $"> ffmpeg {args}{Environment.NewLine}");
-
-            int exitCode = await Task.Run(() =>
-            {
-                var psi = new ProcessStartInfo
+                if (!File.Exists(inputPath))
                 {
-                    FileName = ffmpegPath,
-                    Arguments = args,
-                    UseShellExecute = false,
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true,
-                    CreateNoWindow = true
-                };
+                    File.AppendAllText(logFile, $"File not found: {inputPath}{Environment.NewLine}");
+                    return;
+                }
 
-                using var p = new Process { StartInfo = psi };
-                p.OutputDataReceived += (s, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) File.AppendAllText(logFile, e.Data + Environment.NewLine); };
-                p.ErrorDataReceived  += (s, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) File.AppendAllText(logFile, e.Data + Environment.NewLine); };
-                p.Start();
-                p.BeginOutputReadLine();
-                p.BeginErrorReadLine();
-                p.WaitForExit();
-                return p.ExitCode;
-            });
+                string ffmpegPath = ExtractFfmpegTool("ffmpeg.exe");
+                if (!File.Exists(ffmpegPath))
+                {
+                    File.AppendAllText(logFile, @"ERROR: ffmpeg.exe not found (embedded resource missing)." + Environment.NewLine);
+                    return;
+                }
 
-            File.AppendAllText(logFile, (exitCode == 0 && File.Exists(outPath))
-                ? $"Done ✅  Output: {outPath}{Environment.NewLine}"
-                : "Failed ❌  (see log above)\r\n");
+                string dir = Path.GetDirectoryName(inputPath)!;
+                string name = Path.GetFileNameWithoutExtension(inputPath);
+                string ext = Path.GetExtension(inputPath);
+                string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH.mm.ss");
+                string outPath = Path.Combine(dir, $"{name}_processed_{timestamp}{ext}");
+
+                // Build FFmpeg filters based on active buttons
+                var vfFilters = new List<string>();
+                var afFilters = new List<string>();
+                string extraArgs = "";
+
+                // Rotation
+                if (rotationButtons.Any(b => ((PngIconTag)b.Tag!).Active))
+                {
+                    var active = rotationButtons.First(b => ((PngIconTag)b.Tag!).Active);
+                    var tag = (PngIconTag)active.Tag!;
+                    if (tag.FileName.Contains("90"))
+                    {
+                        vfFilters.Add("transpose=clock");
+                        File.AppendAllText(logFile, "Rotate 90°\r\n");
+                    }
+                    else if (tag.FileName.Contains("180"))
+                    {
+                        vfFilters.Add("transpose=clock,transpose=clock");
+                        File.AppendAllText(logFile, "Rotate 180°\r\n");
+                    }
+                    else if (tag.FileName.Contains("270"))
+                    {
+                        vfFilters.Add("transpose=cclock");
+                        File.AppendAllText(logFile, "Rotate 270°\r\n");
+                    }
+                    else if (tag.FileName.Contains("Custom"))
+                    {
+                        double radians = _customRotateDeg * Math.PI / 180.0;
+                        vfFilters.Add($"rotate={radians:F4}:c=none");
+                        File.AppendAllText(logFile, $"Custom rotate: {_customRotateDeg}° ({radians:F4} rad)\r\n");
+                    }
+                }
+
+                // Flip
+                foreach (var b in grid.Controls.OfType<Button>().Where(b => b.Tag is PngIconTag t && t.Active))
+                {
+                    var tag = (PngIconTag)b.Tag!;
+                    if (tag.FileName.Contains("Flip_Horizontal"))
+                    {
+                        vfFilters.Add("hflip");
+                        File.AppendAllText(logFile, "Flip horizontal\r\n");
+                    }
+                    else if (tag.FileName.Contains("Flip_Vertical"))
+                    {
+                        vfFilters.Add("vflip");
+                        File.AppendAllText(logFile, "Flip vertical\r\n");
+                    }
+                }
+
+                // Volume & Mute logic
+                bool muteActive = bigAudioButtons.Any(b => ((PngIconTag)b.Tag!).Active && ((PngIconTag)b.Tag!).FileName.Contains("Mute"));
+                string audioCodec = muteActive ? "" : "-c:a aac -b:a 192k ";
+                string af = ""; // audio filter string
+
+                if (muteActive)
+                {
+                    // Only strip audio, do not add any audio filters or codecs
+                    extraArgs += " -an";
+                    af = ""; // clear audio filters
+                    File.AppendAllText(logFile, "Audio stripped (mute button active)\r\n");
+                }
+                else
+                {
+                    float gainDb = 0f;
+                    foreach (var b in volumeButtons.Where(b => ((PngIconTag)b.Tag!).Active))
+                    {
+                        var tag = (PngIconTag)b.Tag!;
+                        if (tag.FileName.Contains("50_Up")) { gainDb += 12f; File.AppendAllText(logFile, "Volume +50% (+12dB)\r\n"); }
+                        if (tag.FileName.Contains("25_Up")) { gainDb += 6f;  File.AppendAllText(logFile, "Volume +25% (+6dB)\r\n"); }
+                        if (tag.FileName.Contains("25_Down")) { gainDb -= 6f; File.AppendAllText(logFile, "Volume −25% (−6dB)\r\n"); }
+                        if (tag.FileName.Contains("50_Down")) { gainDb -= 12f; File.AppendAllText(logFile, "Volume −50% (−12dB)\r\n"); }
+                    }
+                    if (gainDb != 0f)
+                    {
+                        af = $"-af \"volume={gainDb}dB\" ";
+                    }
+                }
+
+                // Stereo to Mono
+                bool monoActive = bigAudioButtons.Any(b => ((PngIconTag)b.Tag!).Active && ((PngIconTag)b.Tag!).FileName.Contains("Stereot2mono"));
+                if (monoActive)
+                {
+                    afFilters.Add("pan=mono|c0=.5*c0+.5*c1");
+                    File.AppendAllText(logFile, "Stereo to mono\r\n");
+                }
+
+                // Build filter strings
+                string vf = vfFilters.Count > 0 ? $"-vf \"{string.Join(",", vfFilters)}\" " : "";
+                af = afFilters.Count > 0 ? $"-af \"{string.Join(",", afFilters)}\" " : "";
+
+                string args =
+                    $"-y -i \"{inputPath}\" " +
+                    "-map 0:v? -map 0:a? " +
+                    vf + af +
+                    "-c:v libx264 -preset veryfast -crf 20 " +
+                    audioCodec +
+                    extraArgs +
+                    $"\"{outPath}\"";
+
+                File.AppendAllText(logFile, $"> ffmpeg {args}{Environment.NewLine}");
+
+                int exitCode = await Task.Run(() =>
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = ffmpegPath,
+                        Arguments = args,
+                        UseShellExecute = false,
+                        RedirectStandardError = true,
+                        RedirectStandardOutput = true,
+                        CreateNoWindow = true
+                    };
+
+                    using var p = new Process { StartInfo = psi };
+                    p.OutputDataReceived += (s, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) File.AppendAllText(logFile, e.Data + Environment.NewLine); };
+                    p.ErrorDataReceived  += (s, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) File.AppendAllText(logFile, e.Data + Environment.NewLine); };
+                    p.Start();
+                    p.BeginOutputReadLine();
+                    p.BeginErrorReadLine();
+                    p.WaitForExit();
+                    return p.ExitCode;
+                });
+
+                File.AppendAllText(logFile, (exitCode == 0 && File.Exists(outPath))
+                    ? $"Done ✅  Output: {outPath}{Environment.NewLine}"
+                    : "Failed ❌  (see log above)\r\n");
+            }
+            catch (Exception ex)
+            {
+                File.AppendAllText(logFile, $"Exception: {ex}{Environment.NewLine}");
+            }
+        }
+
+        private string ExtractFfmpegTool(string toolName)
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), "VPT_FFMPEG");
+            Directory.CreateDirectory(tempDir);
+            string outPath = Path.Combine(tempDir, toolName);
+
+            if (!File.Exists(outPath))
+            {
+                var asm = Assembly.GetExecutingAssembly();
+                string? resourceName = asm.GetManifestResourceNames()
+                    .FirstOrDefault(n => n.EndsWith(toolName, StringComparison.OrdinalIgnoreCase));
+                if (resourceName == null)
+                    throw new FileNotFoundException($"Embedded resource {toolName} not found.");
+
+                using var s = asm.GetManifestResourceStream(resourceName);
+                if (s == null)
+                    throw new FileNotFoundException($"Embedded resource stream for {toolName} not found.");
+                using var f = File.Create(outPath);
+                s.CopyTo(f);
+            }
+            return outPath;
+        }
+
+        private string NewLogFilePath()
+        {
+            string logDir = Path.Combine(AppContext.BaseDirectory, "logs");
+            Directory.CreateDirectory(logDir);
+            string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH.mm.ss");
+            return Path.Combine(logDir, $"VPT_{timestamp}.log");
         }
     }
 
@@ -579,7 +721,7 @@ namespace VPT
         {
             var asm = Assembly.GetExecutingAssembly();
             return asm.GetManifestResourceNames()
-                      .FirstOrDefault(n => n.EndsWith($".Assets.IconsPng.{fileName}", StringComparison.OrdinalIgnoreCase));
+                      .FirstOrDefault(n => n.EndsWith($".Assets.{fileName}", StringComparison.OrdinalIgnoreCase));
         }
 
         public static Bitmap Render(string fileName, Color tint, int width, int height, int padding = 8)
@@ -701,3 +843,5 @@ namespace VPT
         }
     }
 }
+
+// This is an integration test: verifying Copilot and IDE
