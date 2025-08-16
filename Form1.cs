@@ -245,6 +245,8 @@ namespace VPT
             }
         }
 
+        private List<Button> rotationButtons = new();
+
         private void AddBtn(string fileName, string help, int col, int row, int colSpan = 1, int rowSpan = 1, bool big = false)
         {
             var btn = new Button
@@ -266,9 +268,33 @@ namespace VPT
             btn.MouseLeave += (s, e) => { if (!((PngIconTag)btn.Tag!).Active) btn.BackColor = CardBg; };
             btn.Resize += (s, e) => ApplyRounded(btn, 14);
 
+            // Register rotation buttons
+            if (fileName.StartsWith("VPU_Icon_Rotation_", StringComparison.OrdinalIgnoreCase))
+                rotationButtons.Add(btn);
+
             btn.Click += (s, e) =>
             {
                 var tag = (PngIconTag)btn.Tag!;
+
+                // Only one rotation button can be active
+                if (fileName.StartsWith("VPU_Icon_Rotation_", StringComparison.OrdinalIgnoreCase))
+                {
+                    foreach (var b in rotationButtons)
+                    {
+                        if (b != btn)
+                        {
+                            var t = (PngIconTag)b.Tag!;
+                            t.Active = false;
+                            b.Tag = t;
+                            b.BackColor = CardBg;
+                            b.FlatAppearance.BorderColor = CardBgHover;
+                            float unit = grid.RowStyles[0].Height;
+                            int target = t.Big ? (int)(unit * 2) - 28 : (int)unit - 18;
+                            if (target < 24) target = 24;
+                            b.Image = PngIconService.Render(t.FileName, Color.Gainsboro, target, target, padding: 8);
+                        }
+                    }
+                }
 
                 // Special case: Rotate custom opens dialog when arming
                 if (tag.FileName.Equals("VPU_Icon_Rotation_Custom.png", StringComparison.OrdinalIgnoreCase))
@@ -300,6 +326,10 @@ namespace VPT
                         tag.Active = false;
                     }
                 }
+                else if (fileName.StartsWith("VPU_Icon_Rotation_", StringComparison.OrdinalIgnoreCase))
+                {
+                    tag.Active = true;
+                }
                 else
                 {
                     tag.Active = !tag.Active;
@@ -309,10 +339,10 @@ namespace VPT
                 btn.BackColor = tag.Active ? Accent : CardBg;
                 btn.FlatAppearance.BorderColor = tag.Active ? Accent : CardBgHover;
 
-                float unit = grid.RowStyles[0].Height;
-                int target = tag.Big ? (int)(unit * 2) - 28 : (int)unit - 18;
-                if (target < 24) target = 24;
-                btn.Image = PngIconService.Render(tag.FileName, tag.Active ? Color.White : Color.Gainsboro, target, target, padding: 8);
+                float unit2 = grid.RowStyles[0].Height;
+                int target2 = tag.Big ? (int)(unit2 * 2) - 28 : (int)unit2 - 18;
+                if (target2 < 24) target2 = 24;
+                btn.Image = PngIconService.Render(tag.FileName, tag.Active ? Color.White : Color.Gainsboro, target2, target2, padding: 8);
             };
 
             tips.SetToolTip(btn, help);
