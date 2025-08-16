@@ -246,6 +246,8 @@ namespace VPT
         }
 
         private List<Button> rotationButtons = new();
+        private List<Button> volumeButtons = new();
+        private List<Button> bigAudioButtons = new();
 
         private void AddBtn(string fileName, string help, int col, int row, int colSpan = 1, int rowSpan = 1, bool big = false)
         {
@@ -272,16 +274,100 @@ namespace VPT
             if (fileName.StartsWith("VPU_Icon_Rotation_", StringComparison.OrdinalIgnoreCase))
                 rotationButtons.Add(btn);
 
+            // Register volume buttons
+            if (fileName.StartsWith("VPU_Icon_Volume_", StringComparison.OrdinalIgnoreCase) &&
+                !fileName.Contains("Mute", StringComparison.OrdinalIgnoreCase))
+                volumeButtons.Add(btn);
+
+            // Register big audio buttons (Stereo to Mono & Mute)
+            if (fileName.Contains("Stereot2mono", StringComparison.OrdinalIgnoreCase) ||
+                fileName.Contains("Mute", StringComparison.OrdinalIgnoreCase))
+                bigAudioButtons.Add(btn);
+
             btn.Click += (s, e) =>
             {
                 var tag = (PngIconTag)btn.Tag!;
 
-                // Only one rotation button can be active
-                if (fileName.StartsWith("VPU_Icon_Rotation_", StringComparison.OrdinalIgnoreCase))
+                // --- Custom rotation dialog: handle FIRST ---
+                if (tag.FileName.Equals("VPU_Icon_Rotation_Custom.png", StringComparison.OrdinalIgnoreCase))
                 {
-                    foreach (var b in rotationButtons)
+                    using (var dlg = new CustomRotationDialog(this))
                     {
-                        if (b != btn)
+                        dlg.StartPosition = FormStartPosition.CenterParent;
+                        if (dlg.ShowDialog(this) != DialogResult.OK)
+                        {
+                            tag.Active = false;
+                        }
+                        else if (float.TryParse(dlg.AngleDeg, NumberStyles.Float, CultureInfo.InvariantCulture, out var deg))
+                        {
+                            _customRotateDeg = deg;
+                            tips.SetToolTip(btn, $"Rotate custom ({_customRotateDeg:0.#}°)");
+                            tag.Active = true;
+                        }
+                        else
+                        {
+                            MessageBox.Show(this, "Please enter a valid number (degrees).", "Invalid input",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            tag.Active = false;
+                        }
+                    }
+                }
+                // --- Rotation buttons: only one active, toggle off if already active ---
+                else if (rotationButtons.Contains(btn))
+                {
+                    if (tag.Active)
+                    {
+                        tag.Active = false;
+                    }
+                    else
+                    {
+                        foreach (var b in rotationButtons)
+                        {
+                            var t = (PngIconTag)b.Tag!;
+                            t.Active = (b == btn);
+                            b.Tag = t;
+                            b.BackColor = t.Active ? Accent : CardBg;
+                            b.FlatAppearance.BorderColor = t.Active ? Accent : CardBgHover;
+                            float unit = grid.RowStyles[0].Height;
+                            int target = t.Big ? (int)(unit * 2) - 28 : (int)unit - 18;
+                            if (target < 24) target = 24;
+                            b.Image = PngIconService.Render(t.FileName, t.Active ? Color.White : Color.Gainsboro, target, target, padding: 8);
+                        }
+                        tag.Active = true;
+                    }
+                }
+                // --- Flip buttons: toggle on/off ---
+                else if (fileName.Contains("Flip", StringComparison.OrdinalIgnoreCase))
+                {
+                    tag.Active = !tag.Active;
+                }
+                // --- Mute and big audio buttons: only one active, toggle off if already active ---
+                else if (bigAudioButtons.Contains(btn))
+                {
+                    if (tag.Active)
+                    {
+                        tag.Active = false;
+                    }
+                    else
+                    {
+                        foreach (var b in bigAudioButtons)
+                        {
+                            var t = (PngIconTag)b.Tag!;
+                            t.Active = (b == btn);
+                            b.Tag = t;
+                            b.BackColor = t.Active ? Accent : CardBg;
+                            b.FlatAppearance.BorderColor = t.Active ? Accent : CardBgHover;
+                            float unit = grid.RowStyles[0].Height;
+                            int target = t.Big ? (int)(unit * 2) - 28 : (int)unit - 18;
+                            if (target < 24) target = 24;
+                            b.Image = PngIconService.Render(t.FileName, t.Active ? Color.White : Color.Gainsboro, target, target, padding: 8);
+                        }
+                        tag.Active = true;
+                    }
+                    // If mute is activated, deactivate all volume buttons
+                    if (fileName.Contains("Mute", StringComparison.OrdinalIgnoreCase) && tag.Active)
+                    {
+                        foreach (var b in volumeButtons)
                         {
                             var t = (PngIconTag)b.Tag!;
                             t.Active = false;
@@ -295,40 +381,54 @@ namespace VPT
                         }
                     }
                 }
-
-                // Special case: Rotate custom opens dialog when arming
-                if (tag.FileName.Equals("VPU_Icon_Rotation_Custom.png", StringComparison.OrdinalIgnoreCase))
+                // --- Volume buttons: stackable by direction, toggle off if already active ---
+                else if (volumeButtons.Contains(btn))
                 {
-                    if (!tag.Active)
-                    {
-                        using (var dlg = new CustomRotationDialog(this))
-                        {
-                            dlg.StartPosition = FormStartPosition.CenterParent;
-                            if (dlg.ShowDialog(this) != DialogResult.OK)
-                                return;
+                    // If mute is active, ignore volume button clicks
+                    bool muteActive = bigAudioButtons.Any(b =>
+                        ((PngIconTag)b.Tag!).Active &&
+                        ((PngIconTag)b.Tag!).FileName.Contains("Mute", StringComparison.OrdinalIgnoreCase));
+                    if (muteActive)
+                        return;
 
-                            if (float.TryParse(dlg.AngleDeg, NumberStyles.Float, CultureInfo.InvariantCulture, out var deg))
-                            {
-                                _customRotateDeg = deg;
-                                tips.SetToolTip(btn, $"Rotate custom ({_customRotateDeg:0.#}°)");
-                            }
-                            else
-                            {
-                                MessageBox.Show(this, "Please enter a valid number (degrees).", "Invalid input",
-                                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                                return;
-                            }
-                        }
-                        tag.Active = true;
-                    }
-                    else
+                    bool isUp = fileName.Contains("Up", StringComparison.OrdinalIgnoreCase);
+                    bool isDown = fileName.Contains("Down", StringComparison.OrdinalIgnoreCase);
+
+                    // If already active, toggle off
+                    if (tag.Active)
                     {
                         tag.Active = false;
                     }
-                }
-                else if (fileName.StartsWith("VPU_Icon_Rotation_", StringComparison.OrdinalIgnoreCase))
-                {
-                    tag.Active = true;
+                    else
+                    {
+                        // Check if any opposite vector is active
+                        bool oppositeActive = volumeButtons.Any(b =>
+                            ((PngIconTag)b.Tag!).Active &&
+                            ((PngIconTag)b.Tag!).FileName.Contains(isUp ? "Down" : "Up", StringComparison.OrdinalIgnoreCase));
+
+                        if (oppositeActive)
+                        {
+                            // Deactivate all volume buttons, then activate only the clicked one
+                            foreach (var b in volumeButtons)
+                            {
+                                var t = (PngIconTag)b.Tag!;
+                                t.Active = false;
+                                b.Tag = t;
+                                b.BackColor = CardBg;
+                                b.FlatAppearance.BorderColor = CardBgHover;
+                                float unit = grid.RowStyles[0].Height;
+                                int target = t.Big ? (int)(unit * 2) - 28 : (int)unit - 18;
+                                if (target < 24) target = 24;
+                                b.Image = PngIconService.Render(t.FileName, Color.Gainsboro, target, target, padding: 8);
+                            }
+                            tag.Active = true;
+                        }
+                        else
+                        {
+                            // Stack same direction
+                            tag.Active = true;
+                        }
+                    }
                 }
                 else
                 {
