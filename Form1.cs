@@ -51,13 +51,13 @@ namespace VPT
         private Panel leftDropArea = null!;
         private TableLayoutPanel grid = null!;
         private Button renderBtn = null!;
-        private readonly ToolTip tips = new ToolTip { AutoPopDelay = 8000, InitialDelay = 300, ReshowDelay = 100 };
+        private readonly ToolTip tips = new ToolTip { AutoPopDelay = 8000, InitialDelay = 300, ReshowDelay = 300 };
 
         // --- State -----------------------------------------------------------
         private float _customRotateDeg = 0f;
         private string? _pendingInputFile;
 
-        // --- PATHS FOR PNG ICONS (covers both layouts) ----------------------
+        // --- PATHS FOR PNG ICONS --------------------------------------------
         internal static readonly string[] IconSearchDirs = new[]
         {
             Path.Combine(AppContext.BaseDirectory, "Assets"),
@@ -80,7 +80,7 @@ namespace VPT
             BuildSingleClicksTab();
             BuildPlaceholders();
 
-            DebugIconProbe();   // one-time helper in Debug builds
+            DebugIconProbe();
         }
 
         [Conditional("DEBUG")]
@@ -292,7 +292,7 @@ namespace VPT
             btn.MouseLeave += (s, e) => { if (!((PngIconTag)btn.Tag!).Active) btn.BackColor = CardBg; };
             btn.Resize += (s, e) => ApplyRounded(btn, 14);
 
-            // Register rotation buttons
+            // Register rotation buttons (includes Custom)
             if (fileName.StartsWith("VPU_Icon_Rotation_", StringComparison.OrdinalIgnoreCase))
                 rotationButtons.Add(btn);
 
@@ -310,7 +310,7 @@ namespace VPT
             {
                 var tag = (PngIconTag)btn.Tag!;
 
-                // --- Custom rotation dialog: handle FIRST ---
+                // --- Custom rotation dialog: exclusive selection with others ---
                 if (tag.FileName.Equals("VPU_Icon_Rotation_Custom.png", StringComparison.OrdinalIgnoreCase))
                 {
                     using (var dlg = new CustomRotationDialog(this))
@@ -324,7 +324,31 @@ namespace VPT
                         {
                             _customRotateDeg = deg;
                             tips.SetToolTip(btn, $"Rotate custom ({_customRotateDeg:0.#}°)");
+
+                            // Deactivate ALL rotation buttons first (90/180/270/Custom)
+                            foreach (var rb in rotationButtons)
+                            {
+                                var rt = (PngIconTag)rb.Tag!;
+                                rt.Active = false;
+                                rb.Tag = rt;
+                                rb.BackColor = CardBg;
+                                rb.FlatAppearance.BorderColor = CardBgHover;
+
+                                float unit = grid.RowStyles[0].Height;
+                                int target = rt.Big ? (int)(unit * 2) - 28 : (int)unit - 18;
+                                if (target < 24) target = 24;
+                                rb.Image = PngIconService.Render(rt.FileName, Color.Gainsboro, target, target, padding: 8);
+                            }
+
+                            // Activate ONLY Custom
                             tag.Active = true;
+                            btn.BackColor = Accent;
+                            btn.FlatAppearance.BorderColor = Accent;
+
+                            float unit2 = grid.RowStyles[0].Height;
+                            int target2 = tag.Big ? (int)(unit2 * 2) - 28 : (int)unit2 - 18;
+                            if (target2 < 24) target2 = 24;
+                            btn.Image = PngIconService.Render(tag.FileName, Color.White, target2, target2, padding: 8);
                         }
                         else
                         {
@@ -333,12 +357,16 @@ namespace VPT
                             tag.Active = false;
                         }
                     }
+
+                    btn.Tag = tag;
+                    return; // custom handled fully
                 }
-                // --- Rotation buttons: only one active, toggle off if already active ---
+                // --- Rotation buttons (90/180/270): exclusive selection ---
                 else if (rotationButtons.Contains(btn))
                 {
                     if (tag.Active)
                     {
+                        // Toggle off if already active
                         tag.Active = false;
                     }
                     else
@@ -363,7 +391,7 @@ namespace VPT
                 {
                     tag.Active = !tag.Active;
                 }
-                // --- Mute and big audio buttons: only one active, toggle off if already active ---
+                // --- Mute and big audio buttons: only one active among big audio set ---
                 else if (bigAudioButtons.Contains(btn))
                 {
                     if (tag.Active)
@@ -386,6 +414,7 @@ namespace VPT
                         }
                         tag.Active = true;
                     }
+
                     // If mute is activated, deactivate all volume buttons
                     if (fileName.Contains("Mute", StringComparison.OrdinalIgnoreCase) && tag.Active)
                     {
@@ -403,31 +432,23 @@ namespace VPT
                         }
                     }
                 }
-                // --- Volume buttons: stackable by direction, toggle off if already active ---
+                // --- Volume buttons: stackable by direction, but blocked if Mute active ---
                 else if (volumeButtons.Contains(btn))
                 {
-                    // If mute is active, ignore volume button clicks
-                    bool muteActive = bigAudioButtons.Any(b =>
-                        ((PngIconTag)b.Tag!).Active &&
-                        ((PngIconTag)b.Tag!).FileName.Contains("Mute", StringComparison.OrdinalIgnoreCase));
-                    if (muteActive)
-                        return;
+                    // Ignore volume changes if mute is active
+                    bool muteActive = bigAudioButtons.Any(b => ((PngIconTag)b.Tag!).Active && ((PngIconTag)b.Tag!).FileName.Contains("Mute", StringComparison.OrdinalIgnoreCase));
+                    if (muteActive) return;
 
                     bool isUp = fileName.Contains("Up", StringComparison.OrdinalIgnoreCase);
                     bool isDown = fileName.Contains("Down", StringComparison.OrdinalIgnoreCase);
 
-                    // If already active, toggle off
                     if (tag.Active)
                     {
-                        tag.Active = false;
+                        tag.Active = false; // toggle off
                     }
                     else
                     {
-                        // Check if any opposite vector is active
-                        bool oppositeActive = volumeButtons.Any(b =>
-                            ((PngIconTag)b.Tag!).Active &&
-                            ((PngIconTag)b.Tag!).FileName.Contains(isUp ? "Down" : "Up", StringComparison.OrdinalIgnoreCase));
-
+                        bool oppositeActive = volumeButtons.Any(b => ((PngIconTag)b.Tag!).Active && ((PngIconTag)b.Tag!).FileName.Contains(isUp ? "Down" : "Up", StringComparison.OrdinalIgnoreCase));
                         if (oppositeActive)
                         {
                             // Deactivate all volume buttons, then activate only the clicked one
@@ -447,7 +468,7 @@ namespace VPT
                         }
                         else
                         {
-                            // Stack same direction
+                            // Stack same direction (multiple ups or multiple downs)
                             tag.Active = true;
                         }
                     }
@@ -457,14 +478,15 @@ namespace VPT
                     tag.Active = !tag.Active;
                 }
 
+                // Common UI refresh for the clicked button
                 btn.Tag = tag;
                 btn.BackColor = tag.Active ? Accent : CardBg;
                 btn.FlatAppearance.BorderColor = tag.Active ? Accent : CardBgHover;
 
-                float unit2 = grid.RowStyles[0].Height;
-                int target2 = tag.Big ? (int)(unit2 * 2) - 28 : (int)unit2 - 18;
-                if (target2 < 24) target2 = 24;
-                btn.Image = PngIconService.Render(tag.FileName, tag.Active ? Color.White : Color.Gainsboro, target2, target2, padding: 8);
+                float unit2b = grid.RowStyles[0].Height;
+                int target2b = tag.Big ? (int)(unit2b * 2) - 28 : (int)unit2b - 18;
+                if (target2b < 24) target2b = 24;
+                btn.Image = PngIconService.Render(tag.FileName, tag.Active ? Color.White : Color.Gainsboro, target2b, target2b, padding: 8);
             };
 
             tips.SetToolTip(btn, help);
@@ -545,12 +567,11 @@ namespace VPT
                 string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH.mm.ss");
                 string outPath = Path.Combine(dir, $"{name}_processed_{timestamp}{ext}");
 
-                // Build FFmpeg filters based on active buttons
                 var vfFilters = new List<string>();
                 var afFilters = new List<string>();
                 string extraArgs = "";
 
-                // Rotation
+                // Rotation (exclusive: 90 / 180 / 270 / Custom)
                 if (rotationButtons.Any(b => ((PngIconTag)b.Tag!).Active))
                 {
                     var active = rotationButtons.First(b => ((PngIconTag)b.Tag!).Active);
@@ -572,22 +593,26 @@ namespace VPT
                     }
                     else if (tag.FileName.Contains("Custom"))
                     {
-                        double radians = _customRotateDeg * Math.PI / 180.0;
-                        vfFilters.Add($"rotate={radians:F4}:c=black:ow=rotw(iw,ih):oh=roth(iw,ih)");
-                        File.AppendAllText(logFile, $"Custom rotate: {_customRotateDeg}° ({radians:F4} rad), canvas expanded, fill black\r\n");
+                        // angle in radians
+                        string rad = (_customRotateDeg * Math.PI / 180.0)
+                            .ToString("0.########", CultureInfo.InvariantCulture);
+
+                        // Positional args: angle : out_w : out_h : cx : cy : fillcolor
+                        vfFilters.Add($"rotate={rad}:'rotw(iw,ih)':'roth(iw,ih)':0:0:black");
+                        File.AppendAllText(logFile, $"Custom rotate: {_customRotateDeg:0.###}° ({rad} rad), expanded canvas, black fill\r\n");
                     }
                 }
 
                 // Flip
                 foreach (var b in grid.Controls.OfType<Button>().Where(b => b.Tag is PngIconTag t && t.Active))
                 {
-                    var tag = (PngIconTag)b.Tag!;
-                    if (tag.FileName.Contains("Flip_Horizontal"))
+                    var t = (PngIconTag)b.Tag!;
+                    if (t.FileName.Contains("Flip_Horizontal"))
                     {
                         vfFilters.Add("hflip");
                         File.AppendAllText(logFile, "Flip horizontal\r\n");
                     }
-                    else if (tag.FileName.Contains("Flip_Vertical"))
+                    else if (t.FileName.Contains("Flip_Vertical"))
                     {
                         vfFilters.Add("vflip");
                         File.AppendAllText(logFile, "Flip vertical\r\n");
@@ -597,13 +622,12 @@ namespace VPT
                 // Volume & Mute logic
                 bool muteActive = bigAudioButtons.Any(b => ((PngIconTag)b.Tag!).Active && ((PngIconTag)b.Tag!).FileName.Contains("Mute"));
                 string audioCodec = muteActive ? "" : "-c:a aac -b:a 192k ";
-                string af = ""; // audio filter string
+                string af = ""; // audio filter string (overridden later if afFilters)
 
                 if (muteActive)
                 {
-                    // Only strip audio, do not add any audio filters or codecs
                     extraArgs += " -an";
-                    af = ""; // clear audio filters
+                    af = "";
                     File.AppendAllText(logFile, "Audio stripped (mute button active)\r\n");
                 }
                 else
@@ -611,15 +635,15 @@ namespace VPT
                     float gainDb = 0f;
                     foreach (var b in volumeButtons.Where(b => ((PngIconTag)b.Tag!).Active))
                     {
-                        var tag = (PngIconTag)b.Tag!;
-                        if (tag.FileName.Contains("50_Up")) { gainDb += 12f; File.AppendAllText(logFile, "Volume +50% (+12dB)\r\n"); }
-                        if (tag.FileName.Contains("25_Up")) { gainDb += 6f;  File.AppendAllText(logFile, "Volume +25% (+6dB)\r\n"); }
-                        if (tag.FileName.Contains("25_Down")) { gainDb -= 6f; File.AppendAllText(logFile, "Volume −25% (−6dB)\r\n"); }
-                        if (tag.FileName.Contains("50_Down")) { gainDb -= 12f; File.AppendAllText(logFile, "Volume −50% (−12dB)\r\n"); }
+                        var t = (PngIconTag)b.Tag!;
+                        if (t.FileName.Contains("50_Up"))   { gainDb += 12f; File.AppendAllText(logFile, "Volume +50% (+12dB)\r\n"); }
+                        if (t.FileName.Contains("25_Up"))   { gainDb +=  6f; File.AppendAllText(logFile, "Volume +25% (+6dB)\r\n"); }
+                        if (t.FileName.Contains("25_Down")) { gainDb -=  6f; File.AppendAllText(logFile, "Volume −25% (−6dB)\r\n"); }
+                        if (t.FileName.Contains("50_Down")) { gainDb -= 12f; File.AppendAllText(logFile, "Volume −50% (−12dB)\r\n"); }
                     }
                     if (gainDb != 0f)
                     {
-                        af = $"-af \"volume={gainDb}dB\" ";
+                        afFilters.Add($"volume={gainDb.ToString("0.###", CultureInfo.InvariantCulture)}dB");
                     }
                 }
 
@@ -633,7 +657,10 @@ namespace VPT
 
                 // Build filter strings
                 string vf = vfFilters.Count > 0 ? $"-vf \"{string.Join(",", vfFilters)}\" " : "";
-                af = afFilters.Count > 0 ? $"-af \"{string.Join(",", afFilters)}\" " : "";
+                if (afFilters.Count > 0)
+                {
+                    af = $"-af \"{string.Join(",", afFilters)}\" ";
+                }
 
                 string args =
                     $"-y -i \"{inputPath}\" " +
@@ -680,6 +707,7 @@ namespace VPT
 
         private string ExtractFfmpegTool(string toolName)
         {
+            // Prefer embedded resource; if you decided to ship alongside EXE as Content, use that path instead
             string tempDir = Path.Combine(Path.GetTempPath(), "VPT_FFMPEG");
             Directory.CreateDirectory(tempDir);
             string outPath = Path.Combine(tempDir, toolName);
@@ -736,7 +764,7 @@ namespace VPT
                 }
                 else
                 {
-                    // 2) Try DISK fallback (VPT\Assets\IconsPng OR Assets\IconsPng)
+                    // 2) Try DISK fallback (VPT\Assets)
                     string? onDisk = Form1.IconSearchDirs
                         .Where(Directory.Exists)
                         .Select(dir => Path.Combine(dir, fileName))
@@ -842,4 +870,5 @@ namespace VPT
     }
 }
 
-// This is an integration test: verifying Copilot and IDE
+// This file contains: exclusive rotation selection (90/180/270/Custom)
+// and corrected FFmpeg rotate syntax using positional args + rotw/roth.
