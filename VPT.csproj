@@ -1,5 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <!-- App basics -->
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
@@ -7,25 +8,49 @@
     <Nullable>enable</Nullable>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
 
-    <!-- Application Icon -->
+    <!-- App icon (relative to project root) -->
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
 
-    <!-- Publish setup -->
-    <PublishSingleFile>true</PublishSingleFile>
+    <!-- Portable single-file EXE (no .NET install needed) -->
     <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <PublishTrimmed>false</PublishTrimmed>
+
+    <!-- Keep native libs INSIDE the single file (avoid loose *_cor3.dll files) -->
+    <IncludeAllContentForSelfExtract>false</IncludeAllContentForSelfExtract>
+    <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+
+    <!-- Deterministic, optimized Release build with embedded PDBs -->
+    <Deterministic>true</Deterministic>
+    <Optimize>true</Optimize>
+    <DebugType>embedded</DebugType>
+
+    <!-- Always drop published output here -->
     <PublishDir>$(MSBuildProjectDirectory)\publish\</PublishDir>
   </PropertyGroup>
 
-  <ItemGroup>
-    <!-- Assets (PNG icons and ICO) -->
-    <EmbeddedResource Include="Assets\*.png" />
-    <EmbeddedResource Include="Assets\AppIcon.ico" />
+  <!-- Clean the publish folder before each publish -->
+  <Target Name="CleanPublishFolder" BeforeTargets="Publish">
+    <RemoveDir Directories="$(PublishDir)" />
+    <MakeDir   Directories="$(PublishDir)" />
+  </Target>
 
-    <!-- FFmpeg executables bundled -->
+  <!-- FFmpeg executables bundled -->
+  <ItemGroup>
     <EmbeddedResource Include="ThirdParty\bin\ffmpeg.exe" />
     <EmbeddedResource Include="ThirdParty\bin\ffplay.exe" />
     <EmbeddedResource Include="ThirdParty\bin\ffprobe.exe" />
+  </ItemGroup>
+
+  <!-- Embed all PNG icons that live directly under VPT\Assets -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\*.png" />
+  </ItemGroup>
+
+  <!-- Keep the raw ICO so the compiler can use it for the exe icon -->
+  <ItemGroup>
+    <None Include="Assets\AppIcon.ico" />
   </ItemGroup>
 </Project>
