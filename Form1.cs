@@ -180,7 +180,7 @@ namespace VPT
             // Row 0: rotate (4 small)
             AddBtn("VPU_Icon_Rotation_90.png",     "Rotate 90°",     col: 0, row: 0);
             AddBtn("VPU_Icon_Rotation_180.png",    "Rotate 180°",    col: 1, row: 0);
-            AddBtn("VPU_Icon_Rotation_270.png",    "Rotate 270°",    col: 2, row: 0);  // you confirmed this PNG exists
+            AddBtn("VPU_Icon_Rotation_270.png",    "Rotate 270°",    col: 2, row: 0);
             AddBtn("VPU_Icon_Rotation_Custom.png", "Rotate custom",  col: 3, row: 0);
 
             // Rows 1–2: flips (2×2 big)
@@ -519,8 +519,6 @@ namespace VPT
             tabTranscode.Controls.Add(wip2);
         }
 
-        
-
         private async Task ProcessAllActionsAsync(string inputPath)
         {
             string logFile = NewLogFilePath();
@@ -575,8 +573,8 @@ namespace VPT
                     else if (tag.FileName.Contains("Custom"))
                     {
                         double radians = _customRotateDeg * Math.PI / 180.0;
-                        vfFilters.Add($"rotate={radians:F4}:c=none");
-                        File.AppendAllText(logFile, $"Custom rotate: {_customRotateDeg}° ({radians:F4} rad)\r\n");
+                        vfFilters.Add($"rotate={radians:F4}:c=black:ow=rotw(iw,ih):oh=roth(iw,ih)");
+                        File.AppendAllText(logFile, $"Custom rotate: {_customRotateDeg}° ({radians:F4} rad), canvas expanded, fill black\r\n");
                     }
                 }
 

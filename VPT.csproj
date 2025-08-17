@@ -7,14 +7,23 @@
     <Nullable>enable</Nullable>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
 
-    <!-- ✅ Add this: path relative to project root -->
+    <!-- Application Icon -->
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+
+    <!-- Publish setup -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishDir>$(MSBuildProjectDirectory)\publish\</PublishDir>
   </PropertyGroup>
 
-  
   <ItemGroup>
+    <!-- Assets (PNG icons and ICO) -->
     <EmbeddedResource Include="Assets\*.png" />
-    <EmbeddedResource Include="Assets\*.ico" />
+    <EmbeddedResource Include="Assets\AppIcon.ico" />
+
+    <!-- FFmpeg executables bundled -->
     <EmbeddedResource Include="ThirdParty\bin\ffmpeg.exe" />
     <EmbeddedResource Include="ThirdParty\bin\ffplay.exe" />
     <EmbeddedResource Include="ThirdParty\bin\ffprobe.exe" />
